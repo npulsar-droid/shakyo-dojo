@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>写経道場</title>
+<style>
+  :root{
+    --bg:#0c0c11; --panel:#15151d; --line:#26263340; --ink:#e9e9f0;
+    --dim:#6b6b7d; --pink:#ff5c8a; --cyan:#5cc8ff; --green:#7cffb0; --err:#ff4d5e;
+    --mono:"SF Mono", Menlo,Consolas,"Roboto Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;}
+  header{padding:18px 20px 6px;}
+  h1{margin:0;font-size:20px;letter-spacing:.04em}
+  h1 span{color:var(--pink)}
+  .sub{color:var(--dim);font-size:12px;margin-top:4px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 20px}
+  .chip{border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    padding:6px 12px;border-radius:999px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .chip.active{border-color:var(--pink);color:var(--pink)}
+  .chip .ck{color:var(--green);margin-left:6px}
+  main{display:flex;gap:16px;padding:8px 20px 32px;flex-wrap:wrap}
+  .col{flex:1 1 380px;min-width:300px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .card h2{margin:0;font-size:14px;padding:12px 16px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center}
+  .note{color:var(--dim);font-size:12.5px;padding:10px 16px 0;line-height:1.6}
+  /* code 写経 */
+  .code{font-family:var(--mono);font-size:14px;line-height:1.75;padding:14px 16px 18px;
+    white-space:pre-wrap;outline:none;cursor:text;tab-size:2;min-height:180px}
+  .code:focus{box-shadow:inset 0 0 0 2px #ff5c8a33}
+  .code .ch{color:var(--dim)}
+  .code .done{color:var(--ink)}
+  .code .auto{color:#3a3a4a}
+  .code .cur{background:var(--pink);color:#111;border-radius:2px}
+  .code.completed .cur{background:transparent;color:var(--ink)}
+  .code.err .cur{background:var(--err);color:#fff;animation:shake .18s}
+  @keyframes shake{25%{transform:translateX(-2px)}75%{transform:translateX(2px)}}
+  .bar{display:flex;gap:10px;align-items:center;padding:0 16px 14px;flex-wrap:wrap}
+  .btn{border:0;border-radius:9px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer}
+  .btn.p{background:var(--pink);color:#111}
+  .btn.g{background:#23232e;color:var(--ink);border:1px solid var(--line)}
+  .stat{color:var(--dim);font-size:12px;margin-left:auto}
+  .banner{color:var(--green);font-weight:700;font-size:13px}
+  /* result */
+  .stagewrap{padding:0}
+  iframe{width:100%;height:300px;border:0;background:#0d0d12;display:block}
+  .hint{color:var(--dim);font-size:12px;text-align:center;padding:120px 20px}
+  footer{color:var(--dim);font-size:11.5px;text-align:center;padding:0 20px 24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>写経<span>道場</span></h1>
+  <div class="sub">お手本を、一字ずつ写す。写し終えたら —— そのコードが、動き出す。<a href="ts.html" style="color:#5cc8ff;text-decoration:none">TS別館へ →</a>　<a href="py.html" style="color:#ffd15c;text-decoration:none">Py別館へ →</a></div>
+</header>
+<div class="chips" id="chips"></div>
+<main>
+  <div class="col">
+    <div class="card">
+      <h2><span id="lessonTitle">—</span><span class="banner" id="banner"></span></h2>
+      <div class="note" id="note"></div>
+      <div class="code" id="code" tabindex="0"></div>
+      <div class="bar">
+        <button class="btn g" id="peek">完成形をチラ見 👀</button>
+        <button class="btn g" id="reset">やり直す ↺</button>
+        <span class="stat" id="stat"></span>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card">
+      <h2>実行結果 <span class="stat" id="runlabel"></span></h2>
+      <div class="stagewrap"><div class="hint" id="hint">写し終える（or チラ見）と、ここで動くよ 🎬</div><iframe id="frame" style="display:none"></iframe></div>
+    </div>
+  </div>
+</main>
+<footer>写経道場 · ローカル単一HTML · 進捗は自動保存 · 薄い字（インデント・日本語）は自動で進む</footer>
+
+<script>
+"use strict";
+
+/* ---- お手本（自己完結して、画面に何か出す小さなJS） ---- */
+const LESSONS = [
+  { id:"circle", title:"其の一 · はじめの一筆", stage:true,
+    note:"canvas に、ピンクの円をひとつ。プログラムで「絵を描く」の、第一歩。",
+    code:
+`const c = document.getElementById("stage");
+const ctx = c.getContext("2d");
+ctx.fillStyle = "hotpink";
+ctx.beginPath();
+ctx.arc(160, 120, 60, 0, Math.PI * 2);
+ctx.fill();` },
+
+  { id:"ball", title:"其の二 · 動き出す", stage:true,
+    note:"円が、跳ねる。requestAnimationFrame で「毎フレーム描き直す」＝アニメの正体。",
+    code:
+`const c = document.getElementById("stage");
+const ctx = c.getContext("2d");
+let x = 40, y = 40, dx = 3, dy = 2;
+function loop() {
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.fillStyle = "cyan";
+  ctx.beginPath();
+  ctx.arc(x, y, 16, 0, Math.PI * 2);
+  ctx.fill();
+  x += dx;
+  y += dy;
+  if (x < 16 || x > c.width - 16) dx = -dx;
+  if (y < 16 || y > c.height - 16) dy = -dy;
+  requestAnimationFrame(loop);
+}
+loop();` },
+
+  { id:"clock", title:"其の三 · 時を刻む", stage:false,
+    note:"1秒ごとに、今の時刻。setInterval で「くり返し実行」する。",
+    code:
+`const app = document.getElementById("app");
+function tick() {
+  const now = new Date();
+  app.textContent = now.toLocaleTimeString();
+}
+setInterval(tick, 1000);
+tick();` },
+
+  { id:"button", title:"其の四 · 押すと、変わる", stage:false,
+    note:"ボタンを作って、押したら背景色が変わる。「イベント」で世界とつながる。",
+    code:
+`const app = document.getElementById("app");
+const colors = ["#ff5c8a", "#5cc8ff", "#7cffb0", "#ffd15c"];
+let i = 0;
+const btn = document.createElement("button");
+btn.textContent = "つぎの色へ";
+btn.onclick = function () {
+  i = (i + 1) % colors.length;
+  document.body.style.background = colors[i];
+};
+app.appendChild(btn);` },
+
+  { id:"fizzbuzz", title:"其の五 · 定番の型 FizzBuzz", stage:false,
+    note:"3で割れたら Fizz、5で Buzz、両方で FizzBuzz。条件分岐の、通過儀礼。",
+    code:
+`const app = document.getElementById("app");
+for (let n = 1; n <= 15; n++) {
+  let t = n;
+  if (n % 15 === 0) t = "FizzBuzz";
+  else if (n % 3 === 0) t = "Fizz";
+  else if (n % 5 === 0) t = "Buzz";
+  const line = document.createElement("div");
+  line.textContent = t;
+  app.appendChild(line);
+}` },
+];
+
+/* ---- 進捗（localStorage） ---- */
+const SAVE = "shakyo_done_v1";
+const done = JSON.parse(localStorage.getItem(SAVE) || "{}");
+const saveDone = () => localStorage.setItem(SAVE, JSON.stringify(done));
+
+/* ---- 状態 ---- */
+let L = LESSONS[0];      // 現在のレッスン
+let model = "";          // お手本文字列
+let auto = [];           // 自動スキップ（行頭インデント）フラグ
+let pos = 0;             // 次に打つ位置
+let started = 0;         // 開始時刻
+let typed = 0;           // 打った文字数
+let completed = false;
+
+const $ = (id) => document.getElementById(id);
+const codeEl = $("code");
+
+function buildAuto(s){
+  const a = new Array(s.length).fill(false);
+  let lineStart = true;
+  for (let i=0;i<s.length;i++){
+    const ch = s[i];
+    if (ch === "\n"){ a[i]=false; lineStart=true; }
+    else if (lineStart && (ch===" "||ch==="\t")){ a[i]=true; }
+    else { a[i] = ch.charCodeAt(0) > 126; lineStart=false; } // 非ASCII（日本語等）はIMEが要るので自動スキップ
+  }
+  return a;
+}
+
+function skipAuto(){ while(pos<model.length && auto[pos]) pos++; }
+
+function load(lesson){
+  L = lesson;
+  model = lesson.code;
+  auto = buildAuto(model);
+  pos = 0; started = 0; typed = 0; completed = false;
+  skipAuto();
+  $("lessonTitle").textContent = lesson.title;
+  $("note").textContent = lesson.note;
+  $("banner").textContent = "";
+  $("stat").textContent = "";
+  codeEl.classList.remove("completed","err");
+  $("frame").style.display="none"; $("hint").style.display="block"; $("runlabel").textContent="";
+  renderCode();
+  renderChips();
+  codeEl.focus();
+}
+
+function renderCode(){
+  let html = "";
+  for (let i=0;i<model.length;i++){
+    let ch = model[i];
+    let disp = ch === "\n" ? "↵\n" : ch;
+    // HTMLエスケープ
+    disp = disp.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    let cls = "ch";
+    if (auto[i]) cls = "auto";
+    if (i < pos) cls = auto[i] ? "auto" : "done";
+    if (i === pos) cls += " cur";
+    html += '<span class="'+cls+'">'+disp+'</span>';
+  }
+  // 末尾カーソル（完成時）
+  if (pos >= model.length) codeEl.classList.add("completed");
+  codeEl.innerHTML = html;
+  const cur = codeEl.querySelector(".cur");
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({block:"nearest"});
+}
+
+function flashErr(){
+  codeEl.classList.add("err");
+  setTimeout(()=>codeEl.classList.remove("err"),180);
+}
+
+function advance(){
+  pos++; typed++;
+  skipAuto();
+  if (pos >= model.length) finish();
+  renderCode();
+}
+
+function back(){
+  if (pos<=0) return;
+  pos--;
+  while(pos>0 && auto[pos]) pos--;
+  renderCode();
+}
+
+function finish(){
+  completed = true;
+  const sec = started ? ((Date.now()-started)/1000) : 0;
+  $("banner").textContent = "完成！ 🎉";
+  $("stat").textContent = typed + " 打 / " + sec.toFixed(1) + " 秒";
+  if (!done[L.id]){ done[L.id]=true; saveDone(); renderChips(); }
+  run();
+}
+
+/* ---- 実行（iframe に、お手本コードを流し込む） ---- */
+function shell(lesson, code){
+  const stage = lesson.stage
+    ? '<canvas id="stage" width="320" height="240"></canvas>' : "";
+  return '<!doctype html><html><head><meta charset="utf-8"><style>'
+    + 'html,body{margin:0;height:100%;background:#0d0d12;color:#eee;'
+    + 'font-family:system-ui,sans-serif;display:flex;flex-direction:column;'
+    + 'align-items:center;justify-content:center;gap:14px}'
+    + '#app{font-size:30px;text-align:center;line-height:1.4}'
+    + 'canvas{background:#000;border-radius:10px}'
+    + 'button{font-size:16px;padding:10px 18px;border-radius:10px;border:0;'
+    + 'background:#ff5c8a;color:#111;font-weight:700;cursor:pointer}'
+    + '</style></head><body>' + stage + '<div id="app"></div>'
+    + '<scr'+'ipt>try{' + code + '}catch(e){document.body.innerHTML='
+    + '"<pre style=\'color:#ff4d5e;padding:16px\'>"+e+"</pre>";}<\/scr'+'ipt>'
+    + '</body></html>';
+}
+
+function run(){
+  $("hint").style.display="none";
+  const f = $("frame");
+  f.style.display="block";
+  f.srcdoc = shell(L, L.code);
+}
+
+/* ---- キー入力 ---- */
+codeEl.addEventListener("keydown", (e)=>{
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (completed && e.key!=="Backspace") return;
+
+  if (e.key === "Backspace"){ e.preventDefault(); back(); return; }
+
+  let ch;
+  if (e.key === "Enter") ch = "\n";
+  else if (e.key === "Tab"){ e.preventDefault(); return; }
+  else if (e.key.length === 1) ch = e.key;
+  else return; // 矢印・Shift 等は無視
+
+  e.preventDefault();
+  if (!started) started = Date.now();
+
+  if (pos < model.length && ch === model[pos]){
+    advance();
+  } else {
+    flashErr();
+  }
+});
+
+/* ---- レッスン一覧 ---- */
+function renderChips(){
+  const box = $("chips"); box.innerHTML="";
+  LESSONS.forEach((les)=>{
+    const c = document.createElement("div");
+    c.className = "chip" + (les.id===L.id ? " active":"");
+    c.innerHTML = les.title + (done[les.id] ? '<span class="ck">✓</span>' : "");
+    c.onclick = ()=>load(les);
+    box.appendChild(c);
+  });
+}
+
+/* ---- ボタン ---- */
+$("peek").onclick = ()=>{ $("runlabel").textContent="（完成形）"; run(); codeEl.focus(); };
+$("reset").onclick = ()=>load(L);
+
+/* ---- 起動 ---- */
+load(LESSONS[0]);
+</script>
+</body>
+</html>
