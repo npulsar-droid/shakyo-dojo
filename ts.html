@@ -26,14 +26,14 @@
   .chip.active{border-color:var(--pink);color:var(--pink)}
   .chip .ck{color:var(--green);margin-left:6px}
   main{display:flex;gap:16px;padding:8px 20px 32px;flex-wrap:wrap}
-  .col{flex:1 1 380px;min-width:300px}
+  .col{flex:1 1 380px;min-width:0}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
   .card h2{margin:0;font-size:14px;padding:12px 16px;border-bottom:1px solid var(--line);
     display:flex;justify-content:space-between;align-items:center}
   .note{color:var(--dim);font-size:12.5px;padding:10px 16px 0;line-height:1.6}
   /* code 写経 */
   .code{font-family:var(--mono);font-size:14px;line-height:1.75;padding:14px 16px 18px;
-    white-space:pre-wrap;outline:none;cursor:text;tab-size:2;min-height:180px}
+    white-space:pre-wrap;overflow-wrap:anywhere;outline:none;cursor:text;tab-size:2;min-height:180px}
   .code:focus{box-shadow:inset 0 0 0 2px #ff5c8a33}
   .code .ch{color:var(--dim)}
   .code .done{color:var(--ink)}
@@ -81,7 +81,7 @@
   <div class="col">
     <div class="card">
       <h2>実行結果 <span class="stat" id="runlabel"></span></h2>
-      <div class="stagewrap"><div class="hint" id="hint">写し終える（or チラ見）と、ここで動くよ 🎬</div><iframe id="frame" style="display:none"></iframe></div>
+      <div class="stagewrap"><div class="hint" id="hint">写し終える（or チラ見）と、ここで動くよ 🎬</div><iframe id="frame" sandbox="allow-scripts" style="display:none"></iframe></div>
     </div>
     <div class="card jscard" id="jscard">
       <h2>型を剥がすと、こうなる <span class="stat">← 実際に走っているのは、この JS</span></h2>
@@ -384,8 +384,15 @@ function stripTypes(src) {
 
 /* ---- 進捗（localStorage） ---- */
 const SAVE = "shakyo_ts_done_v1";
-const done = JSON.parse(localStorage.getItem(SAVE) || "{}");
-const saveDone = () => localStorage.setItem(SAVE, JSON.stringify(done));
+function loadDone(){
+  // 壊れた値やストレージ禁止（プライベートモード等）でも、進捗なしで動かす
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVE) || "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch (e) { return {}; }
+}
+const done = loadDone();
+const saveDone = () => { try { localStorage.setItem(SAVE, JSON.stringify(done)); } catch (e) {} };
 
 /* ---- 状態 ---- */
 let L = LESSONS[0];      // 現在のレッスン
@@ -465,6 +472,11 @@ function advance(){
 
 function back(){
   if (pos<=0) return;
+  if (completed){ // 完成後に消したら、もう一度打てる状態に戻す
+    completed = false;
+    codeEl.classList.remove("completed");
+    $("banner").textContent = ""; $("stat").textContent = "";
+  }
   pos--;
   while(pos>0 && auto[pos]) pos--;
   renderCode();
@@ -475,6 +487,7 @@ function finish(){
   const sec = started ? ((Date.now()-started)/1000) : 0;
   $("banner").textContent = "完成！型が剥がれる 🎉";
   $("stat").textContent = typed + " 打 / " + sec.toFixed(1) + " 秒";
+  $("runlabel").textContent = ""; // チラ見の「（完成形）」表示を消す
   if (!done[L.id]){ done[L.id]=true; saveDone(); renderChips(); }
   run();
 }
@@ -488,7 +501,7 @@ function shell(lesson, code){
     + 'font-family:system-ui,sans-serif;display:flex;flex-direction:column;'
     + 'align-items:center;justify-content:center;gap:14px}'
     + '#app{font-size:30px;text-align:center;line-height:1.4}'
-    + 'canvas{background:#000;border-radius:10px}'
+    + 'canvas{background:#000;border-radius:10px;max-width:100%}'
     + 'button{font-size:16px;padding:10px 18px;border-radius:10px;border:0;'
     + 'background:#ff5c8a;color:#111;font-weight:700;cursor:pointer}'
     + '</style></head><body>' + stage + '<div id="app"></div>'
@@ -509,7 +522,10 @@ function run(){
 
 /* ---- キー入力 ---- */
 codeEl.addEventListener("keydown", (e)=>{
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // Cmd / Ctrl のショートカットは素通し。ただし AltGr（Windows では Ctrl+Alt 扱い）や
+  // Mac の Option で打つ記号（ドイツ語配列などの { [ | ）は受け付ける
+  if (e.metaKey || (e.ctrlKey && !e.altKey)) return;
+  if (e.altKey && !e.ctrlKey && /^[a-z0-9]$/i.test(e.key)) return; // Windows の Alt+英字（メニュー操作）
   if (completed && e.key!=="Backspace") return;
 
   if (e.key === "Backspace"){ e.preventDefault(); back(); return; }
@@ -536,7 +552,12 @@ function renderChips(){
   LESSONS.forEach((les)=>{
     const c = document.createElement("div");
     c.className = "chip" + (les.id===L.id ? " active":"");
-    c.innerHTML = les.title + (done[les.id] ? '<span class="ck">✓</span>' : "");
+    c.textContent = les.title;
+    if (done[les.id]){
+      const ck = document.createElement("span");
+      ck.className = "ck"; ck.textContent = "✓";
+      c.appendChild(ck);
+    }
     c.onclick = ()=>load(les);
     box.appendChild(c);
   });
